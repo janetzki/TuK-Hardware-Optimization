@@ -15,6 +15,7 @@
 
 #define CORE2_PREFETCH_MSR    0x1a0
 #define NHM_PREFETCH_MSR    0x1a4
+#define ALL_CORES -1
 
 #include <bits/stdc++.h>
 using namespace std;
@@ -210,13 +211,13 @@ static int detect_cpu(void) {
 
 
 /* Enable prefetch on nehalem and newer */
-static int set_prefetch_nhm(int core, int enable) {
+static int set_prefetch_nhm(int core, bool enable) {
 
     int begin, end;
 
     fprintf(stderr, "%s all prefetch\n", enable ? "enable" : "disable");
 
-    if (core == -1) {
+    if (core == ALL_CORES) {
         begin = 0;
         end = 1024;
     } else {
@@ -232,12 +233,7 @@ static int set_prefetch_nhm(int core, int enable) {
         /* Read original results */
         int resultBefore = read_msr(fd, NHM_PREFETCH_MSR);
 
-        /* Enable all */
-        if (enable) {
-            write_msr(fd, NHM_PREFETCH_MSR, 0x0);
-        } else {
-            write_msr(fd, NHM_PREFETCH_MSR, 0xf);
-        }
+        write_msr(fd, NHM_PREFETCH_MSR, enable ? 0x0: 0xf);
 
         /* Verify change */
         int resultAfter = read_msr(fd, NHM_PREFETCH_MSR);
@@ -269,7 +265,7 @@ static int set_prefetch_nhm(int core, int enable) {
 }
 
 
-int prefetch_main(int argc, char **argv) {
+int prefetch_main(int argc, char* argv[]) {
 
     int c;
     int core = -1;

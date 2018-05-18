@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include "prefetching.cpp"
 
 using namespace std;
 
@@ -10,16 +11,16 @@ private:
 
 private:
     static void printHeader() {
-        cout << "store_type,data_type,column_size,bandwidth\n";
+        cout << "store_type,data_type,column_size,prefetcher,bandwidth\n";
     }
 
-    void printAttributes() {
+    void printAttributes(bool usingPrefetcher) {
         if (storeType == 0) {
             cout << "column_store,";
         } else {
             cout << "row_store,";
         }
-        cout << "uint" << dataType << "_t," << columnSize << ",";
+        cout << "uint" << dataType << "_t," << columnSize << "," << (usingPrefetcher ? '1' : '0') << ",";
     }
 
     template <typename T>
@@ -67,12 +68,12 @@ private:
     }
 
 public:
-    void runAllBenchmarks() {
+    void runAllBenchmarks(bool usingPrefetcher) {
         printHeader();
         for (storeType = 0; storeType <= 1; storeType++) {
             for (dataType = 8; dataType <= 64; dataType *= 2) {
                 for (columnSize = 1; columnSize <= 1e7; columnSize *= 10) {
-                    printAttributes();
+                    printAttributes(usingPrefetcher);
                     switch (dataType) {
                         case 8:
                             benchmark<uint8_t>();
@@ -96,7 +97,23 @@ public:
     }
 };
 
+
 int main(int argc, char *argv[]) {
     Benchmarker *benchmarker = new Benchmarker;
-    benchmarker->runAllBenchmarks();
+
+    auto result = set_prefetch_nhm(ALL_CORES, true);
+    if (result < 0) {
+        fprintf(stderr, "Unable to access prefetch MSR.\n");
+        return 1;
+    }
+
+    benchmarker->runAllBenchmarks(true);
+
+    result = set_prefetch_nhm(ALL_CORES, false);
+    if (result < 0) {
+        fprintf(stderr, "Unable to access prefetch MSR.\n");
+        return 1;
+    }
+
+    benchmarker->runAllBenchmarks(false);
 }
