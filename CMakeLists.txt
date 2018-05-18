@@ -3,6 +3,6 @@ project(currentProject)
 
 set(CMAKE_CXX_STANDARD 14)
 
-set(SOURCES main.cpp)
-add_executable(currentProject main.cpp)
+set(SOURCES benchmark.cpp prefetching.cpp)
+add_executable(currentProject benchmark.cpp prefetching.cpp)
 set(CMAKE_CXX_FLAGS  "-static-libgcc -static-libstdc++ -O3")
