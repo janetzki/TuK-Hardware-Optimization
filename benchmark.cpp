@@ -67,32 +67,45 @@ private:
         }
     }
 
+    void configure_prefetcher(bool use_prefetcher) {
+      auto result = set_prefetch_nhm(ALL_CORES, use_prefetcher);
+      if (result < 0) {
+          fprintf(stderr, "Unable to access prefetch MSR.\n");
+          exit(1);
+      }
+    }
+
 public:
-    void runAllBenchmarks(bool usingPrefetcher) {
+    void runAllBenchmarks() {
         printHeader();
-        for (storeType = 0; storeType <= 1; storeType++) {
-            for (dataType = 8; dataType <= 64; dataType *= 2) {
-                for (columnSize = 1000; columnSize <= 1e7; columnSize *= 10) {
-                    printAttributes(usingPrefetcher);
-                    switch (dataType) {
-                        case 8:
-                            benchmark<uint8_t>();
-                            break;
-                        case 16:
-                            benchmark<uint16_t>();
-                            break;
-                        case 32:
-                            benchmark<uint32_t>();
-                            break;
-                        case 64:
-                            benchmark<uint64_t>();
-                            break;
-                        default:
-                            cerr << "Invalid value" << endl;
-                    }
-                }
-            }
+        for (int prefetcher = 0; prefetcher <= 1; prefetcher++) {
+          auto usingPrefetcher = prefetcher == 1;
+          configure_prefetcher(usingPrefetcher);
+          for (storeType = 0; storeType <= 1; storeType++) {
+              for (dataType = 8; dataType <= 64; dataType *= 2) {
+                  for (columnSize = 1000; columnSize <= 1e7; columnSize *= 10) {
+                      printAttributes(usingPrefetcher);
+                      switch (dataType) {
+                          case 8:
+                              benchmark<uint8_t>();
+                              break;
+                          case 16:
+                              benchmark<uint16_t>();
+                              break;
+                          case 32:
+                              benchmark<uint32_t>();
+                              break;
+                          case 64:
+                              benchmark<uint64_t>();
+                              break;
+                          default:
+                              cerr << "Invalid value" << endl;
+                      }
+                  }
+              }
+          }
         }
+
         cout.flush();
     }
 };
@@ -100,20 +113,5 @@ public:
 
 int main(int argc, char *argv[]) {
     Benchmarker *benchmarker = new Benchmarker;
-
-    auto result = set_prefetch_nhm(ALL_CORES, true);
-    if (result < 0) {
-        fprintf(stderr, "Unable to access prefetch MSR.\n");
-        return 1;
-    }
-
-    benchmarker->runAllBenchmarks(true);
-
-    result = set_prefetch_nhm(ALL_CORES, false);
-    if (result < 0) {
-        fprintf(stderr, "Unable to access prefetch MSR.\n");
-        return 1;
-    }
-
-    benchmarker->runAllBenchmarks(false);
+    benchmarker->runAllBenchmarks();
 }
