@@ -71,7 +71,7 @@ public:
         printHeader();
         for (storeType = 0; storeType <= 1; storeType++) {
             for (dataType = 8; dataType <= 64; dataType *= 2) {
-                for (columnSize = 1; columnSize <= 1e7; columnSize *= 10) {
+                for (columnSize = 1000; columnSize <= 1e7; columnSize *= 10) {
                     printAttributes();
                     switch (dataType) {
                         case 8:
