@@ -37,7 +37,7 @@ private:
         auto endTime = chrono::high_resolution_clock::now();
 
         uint64_t nanoSeconds = chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
-        cout << sizeof(T) * columnSize / nanoSeconds << '\n';
+        cout << sizeof(T) * columnSize / static_cast<double>(nanoSeconds) << '\n';
         assert(counter == columnSize);
     }
 
