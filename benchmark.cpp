@@ -23,11 +23,20 @@ private:
         cout << "uint" << dataType << "_t," << columnSize << "," << (usingPrefetcher ? '1' : '0') << ",";
     }
 
+    void clear_cache() {
+      std::vector<int> clear = std::vector<int>();
+      clear.resize(500 * 1000 * 1000, 42);
+      for (uint i = 0; i < clear.size(); i++) {
+        clear[i] += 1;
+      }
+      clear.resize(0);
+    }
+
     template <typename T>
     void benchmarkColumnLayout() {
         vector<T> memoryWaster(columnSize, 0);
         uint64_t counter = 0;
-
+        clear_cache();
         auto startTime = chrono::high_resolution_clock::now();
         for (auto it = memoryWaster.begin(); it != memoryWaster.end(); ++it) {
             if (*it == 0) {
@@ -45,16 +54,17 @@ private:
     void benchmarkRowLayout() {
         vector<vector<T>> memoryWaster(columnSize, vector<T>(100, 0));
         uint64_t counter = 0;
-
-        clock_t begin = clock();
+        clear_cache();
+        auto startTime = chrono::high_resolution_clock::now();
         for (auto it = memoryWaster.begin(); it != memoryWaster.end(); ++it) {
             if (it->at(0) == 0) {
                 counter++;
             }
         }
-        clock_t end = clock();
-        double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-        cout << sizeof(T) * columnSize / elapsed_secs / 1e9 << '\n';
+        auto endTime = chrono::high_resolution_clock::now();
+
+        uint64_t nanoSeconds = chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
+        cout << sizeof(T) * columnSize / static_cast<double>(nanoSeconds) << '\n';
         assert(counter == columnSize);
     }
 
@@ -83,7 +93,8 @@ public:
           configure_prefetcher(usingPrefetcher);
           for (storeType = 0; storeType <= 1; storeType++) {
               for (dataType = 8; dataType <= 64; dataType *= 2) {
-                  for (columnSize = 1000; columnSize <= 1e7; columnSize *= 10) {
+                  for (double exp = 3.0; exp <= 7.0; exp += 0.2) {
+                      columnSize = static_cast<int>(std::pow(10, exp));
                       printAttributes(usingPrefetcher);
                       switch (dataType) {
                           case 8:
