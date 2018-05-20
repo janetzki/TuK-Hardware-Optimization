@@ -199,7 +199,6 @@ static int detect_cpu(void) {
             fprintf(stderr, "Found Core2 CPU\n");
             is_core2 = 1;
             break;
-            break;
         default:
             fprintf(stderr, "Unsupported model %d\n", model);
             is_core2 = -1;
@@ -238,7 +237,7 @@ static int set_prefetch_nhm(int core, bool enable) {
         /* Verify change */
         int resultAfter = read_msr(fd, NHM_PREFETCH_MSR);
 
-        cerr << "\tMSR for core " << core << "%d: " << hex << resultBefore << " to " << resultAfter;
+        cerr << "\tMSR for core " << dec << core << ": " << hex << resultBefore << " to " << resultAfter << endl;
 
         /*
          fprintf(stderr, "\tCore %d old : L2HW=%c L2ADJ=%c DCU=%c DCUIP=%c\n",
