@@ -5,22 +5,48 @@ using namespace std;
 
 class Benchmarker {
 private:
+    // PRINTED ATTRIBUTES:
+    // Either COLUMN_STORE or ROW_STORE
     int storeType;
+
+    // Number of bits in uint data type
     int dataType;
+
+    // Column size in bytes
     int columnSize;
+
+    // Whether prefetcher is enabled
+    bool usePrefetcher;
+
+    // Whether to flush the cache between every benchmark
+    bool withCacheFlush;
+
+    // Number of columns in the table
+    size_t columnCount;
+
+    // UNPRINTED ATTRIBUTES:
+    // Number of rows in the table
+    size_t rowCount;
+
+    int numberOfRuns = 10;
+
+    const int COLUMN_STORE = 0;
+    const int ROW_STORE = 1;
 
 private:
     static void printHeader() {
-        cout << "store_type,data_type,column_size,prefetcher,bandwidth\n";
+        cout << "store_type,data_type,column_size,column_count,prefetcher,cache_flush,bandwidth\n";
     }
 
-    void printAttributes(bool usingPrefetcher) {
-        if (storeType == 0) {
+    void printAttributes() {
+        if (storeType == COLUMN_STORE) {
             cout << "column_store,";
         } else {
             cout << "row_store,";
         }
-        cout << "uint" << dataType << "_t," << columnSize << "," << (usingPrefetcher ? '1' : '0') << ",";
+        cout << "uint" << dataType << "_t," << columnSize << "," << columnCount << ","
+        << (usePrefetcher ? '1' : '0') << ","
+        << (withCacheFlush ? '1' : '0') << ",";
     }
 
     void clear_cache() {
@@ -32,53 +58,73 @@ private:
       clear.resize(0);
     }
 
-    template <typename T>
-    void benchmarkColumnLayout() {
-        vector<T> memoryWaster(columnSize, 0);
-        uint64_t counter = 0;
-        clear_cache();
-        auto startTime = chrono::high_resolution_clock::now();
-        for (auto it = memoryWaster.begin(); it != memoryWaster.end(); ++it) {
-            if (*it == 0) {
-                counter++;
-            }
-        }
-        auto endTime = chrono::high_resolution_clock::now();
-
-        uint64_t nanoSeconds = chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
-        cout << sizeof(T) * columnSize / static_cast<double>(nanoSeconds) << '\n';
-        assert(counter == columnSize);
+    int random_int(int min, int max) {
+      return std::rand() % (max - min) + min;
     }
 
     template <typename T>
-    void benchmarkRowLayout() {
-        vector<vector<T>> memoryWaster(columnSize, vector<T>(100, 0));
+    std::vector<T> random_vector(size_t element_count) {
+      std::vector<T> values = std::vector<T>();
+      values.resize(element_count);
+
+      for (size_t i = 0; i < element_count; i++) {
+        values[i] = static_cast<T>(random_int(0, 1000));
+      }
+
+      return values;
+    }
+
+    template <typename T>
+    uint64_t benchmarkColumnLayout(std::vector<T>& values) {
         uint64_t counter = 0;
-        clear_cache();
-        auto startTime = chrono::high_resolution_clock::now();
-        for (auto it = memoryWaster.begin(); it != memoryWaster.end(); ++it) {
-            if (it->at(0) == 0) {
+        for (size_t i = 0; i < rowCount; i++) {
+            if (values[i] == 0) {
                 counter++;
             }
         }
-        auto endTime = chrono::high_resolution_clock::now();
+        return counter;
+    }
 
-        uint64_t nanoSeconds = chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
-        cout << sizeof(T) * columnSize / static_cast<double>(nanoSeconds) << '\n';
-        assert(counter == columnSize);
+    template <typename T>
+    uint64_t benchmarkRowLayout(std::vector<T>& values) {
+        uint64_t counter = 0;
+        for (size_t i = 0; i < values.size(); i += columnCount) {
+            if (values[i] == 0) {
+                counter++;
+            }
+        }
+        return counter;
     }
 
     template <typename T>
     void benchmark() {
-        if (storeType == 0) {
-            return benchmarkColumnLayout<T>();
-        } else {
-            return benchmarkRowLayout<T>();
+      printAttributes();
+      dataType = sizeof(T);
+      rowCount = columnSize / sizeof(T);
+      auto values = random_vector<T>(rowCount * columnCount);
+      uint64_t nanoSecondsTotal = 0;
+      for (int i = 0; i < numberOfRuns; i++) {
+        if (withCacheFlush) {
+          clear_cache();
         }
+        uint64_t counter;
+        auto startTime = chrono::high_resolution_clock::now();
+        if (storeType == COLUMN_STORE) {
+            counter = benchmarkColumnLayout<T>(values);
+        } else if (storeType == ROW_STORE){
+            counter =  benchmarkRowLayout<T>(values);
+        }
+        auto endTime = chrono::high_resolution_clock::now();
+
+        nanoSecondsTotal += chrono::duration_cast<chrono::nanoseconds>(endTime - startTime).count();
+        assert(counter < rowCount);
+      }
+      double averageNanoSeconds = nanoSecondsTotal / static_cast<double>(numberOfRuns);
+      cout << columnSize / averageNanoSeconds << '\n';
     }
 
-    void configure_prefetcher(bool use_prefetcher) {
-      auto result = set_prefetch_nhm(ALL_CORES, use_prefetcher);
+    void configure_prefetcher() {
+      auto result = set_prefetch_nhm(ALL_CORES, usePrefetcher);
       if (result < 0) {
           fprintf(stderr, "Unable to access prefetch MSR.\n");
           exit(1);
@@ -88,32 +134,24 @@ private:
 public:
     void runAllBenchmarks() {
         printHeader();
-        for (int prefetcher = 0; prefetcher <= 1; prefetcher++) {
-          auto usingPrefetcher = prefetcher == 1;
-          configure_prefetcher(usingPrefetcher);
-          for (storeType = 0; storeType <= 1; storeType++) {
-              for (dataType = 8; dataType <= 64; dataType *= 2) {
-                  for (double exp = 3.0; exp <= 7.0; exp += 0.2) {
-                      columnSize = static_cast<int>(std::pow(10, exp));
-                      printAttributes(usingPrefetcher);
-                      switch (dataType) {
-                          case 8:
-                              benchmark<uint8_t>();
-                              break;
-                          case 16:
-                              benchmark<uint16_t>();
-                              break;
-                          case 32:
-                              benchmark<uint32_t>();
-                              break;
-                          case 64:
-                              benchmark<uint64_t>();
-                              break;
-                          default:
-                              cerr << "Invalid value" << endl;
-                      }
-                  }
-              }
+        auto columnCounts = {10, 50};
+        for (auto numberOfColumns : columnCounts) {
+          columnCount = numberOfColumns;
+          for (int cacheFlush = 0; cacheFlush <= 1; cacheFlush++) {
+              withCacheFlush = (cacheFlush == 1);
+              for (int prefetcher = 0; prefetcher <= 1; prefetcher++) {
+                usePrefetcher = (prefetcher == 1);
+                configure_prefetcher();
+                for (storeType = 0; storeType <= 1; storeType++) {
+                    for (double exp = 3.0; exp <= 9.0; exp += 0.5) {
+                        columnSize = static_cast<int>(std::pow(10, exp));
+                        benchmark<uint8_t>();
+                        benchmark<uint16_t>();
+                        benchmark<uint32_t>();
+                        benchmark<uint64_t>();
+                    }
+                }
+             }
           }
         }
 
